@@ -7,7 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .active-tab { border-bottom: 4px solid #f97316; color: #f97316; }
-        .loading { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        .loading { animation: pulse 2s infinite; }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
     </style>
 </head>
@@ -15,55 +15,50 @@
 
     <header class="bg-slate-800 p-4 shadow-2xl sticky top-0 z-40">
         <h1 class="text-xl font-bold text-center text-orange-500 mb-4">🔥 送り火サーチャー</h1>
-        
         <div class="flex justify-around border-b border-slate-700">
-            <button onclick="switchDeck('main')" id="tab-main" class="pb-2 px-4 active-tab font-bold">メイン</button>
-            <button onclick="switchDeck('side')" id="tab-side" class="pb-2 px-4 text-slate-400 font-bold">サイド</button>
+            <button onclick="switchDeck('main')" id="tab-main" class="pb-2 px-4 active-tab font-bold text-sm">メイン</button>
+            <button onclick="switchDeck('side')" id="tab-side" class="pb-2 px-4 text-slate-400 font-bold text-sm">不採用/サイド</button>
         </div>
     </header>
 
     <main class="flex-grow p-4 max-w-md mx-auto w-full">
-        <div id="deck-list" class="space-y-3 pb-24">
-            </div>
+        <div id="deck-list" class="space-y-3 pb-24"></div>
     </main>
 
     <button onclick="openModal()" class="fixed bottom-6 right-6 bg-orange-500 w-14 h-14 rounded-full text-3xl shadow-lg z-30 flex items-center justify-center active:bg-orange-600">＋</button>
 
     <div id="modal" class="hidden fixed inset-0 bg-slate-900/95 z-50 p-4">
-        <div class="max-w-md mx-auto pt-10">
+        <div class="max-w-md mx-auto pt-6">
             <div class="flex justify-between items-center mb-4">
-                <h2 class="text-xl font-bold">カードを追加</h2>
-                <button onclick="closeModal()" class="text-slate-400 text-2xl">&times;</button>
+                <h2 class="text-lg font-bold">カードを追加 (日本語/英名OK)</h2>
+                <button onclick="closeModal()" class="text-slate-400 text-3xl">&times;</button>
             </div>
             
             <div class="relative">
                 <input id="card-input" type="text" oninput="fetchSuggestions(this.value)" 
-                    placeholder="カード名をいれてね（ラノワール、など）" 
-                    class="w-full p-4 rounded-lg bg-slate-800 border-2 border-orange-500 outline-none text-lg">
+                    placeholder="カード名を入力..." 
+                    class="w-full p-4 rounded-lg bg-slate-800 border-2 border-orange-500 outline-none">
                 <div id="loading-spinner" class="hidden absolute right-4 top-4 loading text-orange-500">⏳</div>
             </div>
 
-            <div id="suggestions" class="mt-4 space-y-2 max-h-[60vh] overflow-y-auto">
+            <div id="suggestions" class="mt-4 space-y-2 max-h-[70vh] overflow-y-auto pb-10">
                 </div>
         </div>
     </div>
 
     <script>
-        // データの初期化
         let currentDeckType = 'main';
-        let decks = JSON.parse(localStorage.getItem('pyreDecks') || '{"main":[], "side":[]}');
+        let decks = JSON.parse(localStorage.getItem('pyreDecksV2') || '{"main":[], "side":[]}');
 
-        // デッキ切り替え
         function switchDeck(type) {
             currentDeckType = type;
-            document.getElementById('tab-main').className = type === 'main' ? 'pb-2 px-4 active-tab font-bold' : 'pb-2 px-4 text-slate-400 font-bold';
-            document.getElementById('tab-side').className = type === 'side' ? 'pb-2 px-4 active-tab font-bold' : 'pb-2 px-4 text-slate-400 font-bold';
+            document.getElementById('tab-main').className = type === 'main' ? 'pb-2 px-4 active-tab font-bold text-sm' : 'pb-2 px-4 text-slate-400 font-bold text-sm';
+            document.getElementById('tab-side').className = type === 'side' ? 'pb-2 px-4 active-tab font-bold text-sm' : 'pb-2 px-4 text-slate-400 font-bold text-sm';
             render();
         }
 
-        // Scryfallから候補を取得
         let timer;
-        function fetchSuggestions(query) {
+        async function fetchSuggestions(query) {
             clearTimeout(timer);
             const container = document.getElementById('suggestions');
             const spinner = document.getElementById('loading-spinner');
@@ -73,35 +68,46 @@
             spinner.classList.remove('hidden');
             timer = setTimeout(async () => {
                 try {
-                    const res = await fetch(`https://api.scryfall.com/cards/autocomplete?q=${encodeURIComponent(query)}`);
+                    // Scryfallの検索APIを使い、日本語を含めて検索
+                    const res = await fetch(`https://api.scryfall.com/cards/search?q=${encodeURIComponent(query)}+type%3Acreature&order=name`);
                     const data = await res.json();
                     spinner.classList.add('hidden');
                     
-                    container.innerHTML = data.data.map(name => `
-                        <div onclick="addCard('${name}')" class="bg-slate-800 p-4 rounded-lg border border-slate-700 active:bg-orange-600 active:border-orange-400 transition-colors">
-                            ${name}
-                        </div>
-                    `).join('');
+                    if (data.data) {
+                        container.innerHTML = data.data.map(card => {
+                            // 日本語名がある場合はそれを表示
+                            const jpName = card.printed_name || card.name;
+                            return `
+                                <div onclick="addCard('${card.name}')" class="bg-slate-800 p-4 rounded-lg border border-slate-700 active:bg-orange-600 transition-colors">
+                                    <div class="font-bold">${jpName}</div>
+                                    <div class="text-xs text-slate-400 italic">${card.name !== jpName ? card.name : ''}</div>
+                                </div>
+                            `;
+                        }).join('');
+                    } else {
+                        container.innerHTML = `<div class="p-4 text-slate-500">見つかりませんでした</div>`;
+                    }
                 } catch (e) {
                     spinner.classList.add('hidden');
                 }
             }, 500);
         }
 
-        // カードをデッキに追加
-        async function addCard(name) {
+        async function addCard(englishName) {
             const spinner = document.getElementById('loading-spinner');
             spinner.classList.remove('hidden');
             
             try {
-                const res = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}`);
+                // 正確な名前で取得し、日本語情報を引き出す
+                const res = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(englishName)}`);
                 const data = await res.json();
                 
                 const card = {
                     id: Date.now(),
                     name: data.printed_name || data.name,
                     cmc: data.cmc,
-                    types: (data.type_line.split(" — ")[1] || "").split(" "),
+                    // クリーチャータイプ（サブタイプ）の抽出をより丁寧に
+                    types: (data.type_line.split(" — ")[1] || "").split(" ").filter(t => t !== ""),
                     image: data.image_uris?.small || ""
                 };
 
@@ -109,44 +115,42 @@
                 save();
                 closeModal();
             } catch (e) {
-                alert("追加に失敗しました。");
+                alert("登録エラー");
             } finally {
                 spinner.classList.add('hidden');
             }
         }
 
         function save() {
-            localStorage.setItem('pyreDecks', JSON.stringify(decks));
+            localStorage.setItem('pyreDecksV2', JSON.stringify(decks));
             render();
         }
 
         function render() {
             const list = document.getElementById('deck-list');
             list.innerHTML = "";
-            
             const currentList = decks[currentDeckType].sort((a, b) => a.cmc - b.cmc);
 
             if (currentList.length === 0) {
-                list.innerHTML = `<div class="text-center text-slate-500 mt-20">右下の「＋」からカードを登録してね！</div>`;
+                list.innerHTML = `<div class="text-center text-slate-500 mt-20 italic">カードがありません</div>`;
                 return;
             }
 
             currentList.forEach(card => {
                 const div = document.createElement('div');
-                div.className = "bg-slate-800 border-l-4 border-orange-500 rounded-lg shadow-lg overflow-hidden mb-3";
+                div.className = "bg-slate-800 border-l-4 border-orange-500 rounded-lg shadow-lg mb-3";
                 div.innerHTML = `
                     <div class="p-4 flex justify-between items-center" onclick="toggleSearch(${card.id})">
                         <div class="flex items-center gap-3">
-                            <span class="bg-orange-900 text-orange-300 font-mono px-2 py-1 rounded text-sm">${card.cmc}</span>
+                            <span class="bg-slate-900 text-orange-400 font-bold px-2 py-1 rounded text-sm">${card.cmc}</span>
                             <div>
-                                <div class="font-bold text-lg leading-tight">${card.name}</div>
-                                <div class="text-xs text-slate-500">${card.types.join(' ')}</div>
+                                <div class="font-bold">${card.name}</div>
+                                <div class="text-[10px] text-slate-500">${card.types.join(' ')}</div>
                             </div>
                         </div>
-                        <button onclick="event.stopPropagation(); removeCard(${card.id})" class="text-slate-600 p-2">&times;</button>
+                        <button onclick="event.stopPropagation(); removeCard(${card.id})" class="text-slate-600 p-2 text-xl">&times;</button>
                     </div>
-                    <div id="res-${card.id}" class="hidden bg-slate-900/50 p-4 border-t border-slate-700">
-                    </div>
+                    <div id="res-${card.id}" class="hidden bg-slate-950 p-4 border-t border-slate-700 rounded-b-lg animate-in fade-in duration-300"></div>
                 `;
                 list.appendChild(div);
             });
@@ -160,38 +164,31 @@
             }
 
             const card = decks[currentDeckType].find(c => c.id === id);
-            // 条件：同じデッキ内で CMC+1 かつ クリーチャー・タイプが一致
+            // 採用・不採用に関わらずデッキ全体から探すなら decks.main と decks.side を合体させる必要がありますが、
+            // 今回は「表示されている方のデッキリスト内」で検索します。
             const targets = decks[currentDeckType].filter(c => 
                 c.cmc === card.cmc + 1 && 
-                c.types.some(t => card.types.includes(t) && t !== "")
+                c.types.some(t => card.types.includes(t))
             );
 
             if (targets.length > 0) {
-                resDiv.innerHTML = `<div class="text-orange-400 font-bold text-sm mb-2">🔥 送り先（CMC ${card.cmc + 1}）:</div>` +
-                    targets.map(t => `<div class="py-1">・${t.name}</div>`).join('');
+                resDiv.innerHTML = `<div class="text-orange-500 text-xs font-bold mb-2 uppercase">Can Search (CMC ${card.cmc + 1}):</div>` +
+                    targets.map(t => `<div class="py-1 border-b border-slate-800 last:border-0">${t.name}</div>`).join('');
             } else {
-                resDiv.innerHTML = `<div class="text-slate-500 text-sm italic">デッキ内に該当するカードがありません</div>`;
+                resDiv.innerHTML = `<div class="text-slate-600 text-sm">該当なし</div>`;
             }
             resDiv.classList.remove('hidden');
         }
 
         function removeCard(id) {
-            if(confirm('このカードを削除しますか？')) {
+            if(confirm('削除しますか？')) {
                 decks[currentDeckType] = decks[currentDeckType].filter(c => c.id !== id);
                 save();
             }
         }
 
-        function openModal() {
-            document.getElementById('modal').classList.remove('hidden');
-            document.getElementById('card-input').focus();
-        }
-
-        function closeModal() {
-            document.getElementById('modal').classList.add('hidden');
-            document.getElementById('card-input').value = "";
-            document.getElementById('suggestions').innerHTML = "";
-        }
+        function openModal() { document.getElementById('modal').classList.remove('hidden'); document.getElementById('card-input').focus(); }
+        function closeModal() { document.getElementById('modal').classList.add('hidden'); document.getElementById('card-input').value = ""; document.getElementById('suggestions').innerHTML = ""; }
 
         render();
     </script>
