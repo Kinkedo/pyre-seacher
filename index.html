@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>送り火サーチャー</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .card-node { transition: all 0.2s; }
+        .card-node:active { transform: scale(0.95); }
+    </style>
+</head>
+<body class="bg-slate-900 text-white min-h-screen pb-20">
+    <header class="p-4 bg-slate-800 shadow-xl border-b border-orange-500">
+        <h1 class="text-xl font-bold text-orange-400">🔥 送り火サーチャー</h1>
+    </header>
+
+    <main id="app" class="p-4 max-w-md mx-auto">
+        <div class="mb-6 flex gap-2 overflow-x-auto pb-2">
+            <button class="bg-orange-600 px-4 py-1 rounded-full text-sm">メインデッキ</button>
+            <button class="bg-slate-700 px-4 py-1 rounded-full text-sm">+ 新規</button>
+        </div>
+
+        <div id="deck-list" class="space-y-3">
+            </div>
+    </main>
+
+    <div class="fixed bottom-0 left-0 right-0 p-4 bg-slate-800 border-t border-slate-700 flex justify-center">
+        <button onclick="showAddModal()" class="bg-orange-500 hover:bg-orange-400 w-12 h-12 rounded-full text-2xl shadow-lg shadow-orange-900/50">＋</button>
+    </div>
+
+    <div id="modal" class="hidden fixed inset-0 bg-black/80 flex items-center justify-center p-4">
+        <div class="bg-slate-800 p-6 rounded-xl w-full max-w-sm border border-slate-600">
+            <h2 class="text-lg font-bold mb-4">カードを追加</h2>
+            <input id="card-name-input" type="text" placeholder="カード名を英語か日本語で..." class="w-full p-2 rounded bg-slate-700 border border-slate-500 mb-4 focus:outline-none focus:border-orange-500">
+            <div class="flex justify-end gap-3">
+                <button onclick="hideAddModal()" class="text-slate-400">キャンセル</button>
+                <button onclick="addCard()" class="bg-orange-500 px-4 py-2 rounded font-bold">追加</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // デッキデータ（ブラウザに保存される）
+        let deck = JSON.parse(localStorage.getItem('myDeck') || '[]');
+
+        function save() {
+            localStorage.setItem('myDeck', JSON.stringify(deck));
+            render();
+        }
+
+        async function addCard() {
+            const name = document.getElementById('card-name-input').value;
+            if(!name) return;
+
+            // Scryfall APIでカード情報を取得
+            const res = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(name)}`);
+            if(!res.ok) { alert("カードが見つかりませんでした"); return; }
+            
+            const data = await res.json();
+            const card = {
+                id: Date.now(),
+                name: data.printed_name || data.name,
+                cmc: data.cmc,
+                types: data.type_line.split(" — ")[1]?.split(" ") || [], // サブタイプ抽出
+                fullType: data.type_line,
+                active: true
+            };
+
+            deck.push(card);
+            save();
+            hideAddModal();
+            document.getElementById('card-name-input').value = "";
+        }
+
+        function render() {
+            const list = document.getElementById('deck-list');
+            list.innerHTML = "";
+
+            // CMC順に並び替え
+            const sorted = [...deck].sort((a, b) => a.cmc - b.cmc);
+
+            sorted.forEach(card => {
+                const div = document.createElement('div');
+                div.className = "bg-slate-800 border-l-4 border-orange-500 p-3 rounded shadow-md card-node";
+                div.innerHTML = `
+                    <div class="flex justify-between items-center" onclick="showSearchable(${card.id})">
+                        <div>
+                            <div class="text-xs text-slate-400">CMC: ${card.cmc}</div>
+                            <div class="font-bold">${card.name}</div>
+                        </div>
+                        <button onclick="event.stopPropagation(); removeCard(${card.id})" class="text-slate-600 text-xs">削除</button>
+                    </div>
+                    <div id="search-${card.id}" class="hidden mt-3 pt-3 border-t border-slate-700 text-sm text-orange-200">
+                        </div>
+                `;
+                list.appendChild(div);
+            });
+        }
+
+        function showSearchable(id) {
+            const target = deck.find(c => c.id === id);
+            const display = document.getElementById(`search-${id}`);
+            
+            if(!display.classList.contains('hidden')) {
+                display.classList.add('hidden');
+                return;
+            }
+
+
+            const results = deck.filter(c => 
+                c.cmc === target.cmc + 1 && 
+                c.types.some(t => target.types.includes(t))
+            );
+
+            if(results.length > 0) {
+                display.innerHTML = "🔍 サーチ可能:<br>" + results.map(r => `・${r.name}`).join("<br>");
+            } else {
+                display.innerHTML = "❌ サーチ先がデッキにありません";
+            }
+            display.classList.remove('hidden');
+        }
+
+        function removeCard(id) {
+            deck = deck.filter(c => c.id !== id);
+            save();
+        }
+
+        function showAddModal() { document.getElementById('modal').classList.remove('hidden'); }
+        function hideAddModal() { document.getElementById('modal').classList.add('hidden'); }
+
+        render();
+    </script>
+</body>
+</html>
