@@ -7,8 +7,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .inactive { opacity: 0.35; filter: grayscale(0.8); }
-        .loading { animation: pulse 1.5s infinite; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
     </style>
 </head>
 <body class="bg-slate-900 text-white min-h-screen flex flex-col font-sans">
@@ -16,12 +14,11 @@
     <header class="bg-slate-800 p-4 shadow-2xl sticky top-0 z-40 border-b border-orange-600">
         <div class="flex justify-between items-center mb-2">
             <h1 class="text-lg font-bold text-orange-500">🔥 送り火サーチャー</h1>
-            <button onclick="addNewDeck()" class="text-xs bg-slate-700 px-3 py-1.5 rounded-full text-slate-300 active:bg-slate-600">+ 新規デッキ</button>
+            <button onclick="addNewDeck()" class="text-xs bg-slate-700 px-3 py-1.5 rounded-full">+ 新規</button>
         </div>
         <div class="flex gap-2">
-            <select id="deck-selector" onchange="changeDeck(this.value)" class="flex-grow bg-slate-900 border border-slate-600 p-2 rounded text-sm outline-none text-orange-200">
-            </select>
-            <button onclick="deleteCurrentDeck()" class="text-xs text-red-500 px-2">削除</button>
+            <select id="deck-selector" onchange="changeDeck(this.value)" class="flex-grow bg-slate-900 border border-slate-600 p-2 rounded text-sm text-orange-200 outline-none"></select>
+            <button onclick="deleteCurrentDeck()" class="text-xs text-red-500">削除</button>
         </div>
     </header>
 
@@ -29,127 +26,95 @@
         <div id="deck-list" class="space-y-3 pb-24"></div>
     </main>
 
-    <button onclick="openModal()" class="fixed bottom-6 right-6 bg-orange-600 w-14 h-14 rounded-full text-3xl shadow-lg z-30 flex items-center justify-center active:scale-90 transition-transform">＋</button>
+    <button onclick="openModal()" class="fixed bottom-6 right-6 bg-orange-600 w-14 h-14 rounded-full text-3xl shadow-lg z-30 flex items-center justify-center">＋</button>
 
     <div id="modal" class="hidden fixed inset-0 bg-slate-900/98 z-50 p-4">
         <div class="max-w-md mx-auto pt-4 flex flex-col h-full">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-lg font-bold text-orange-400">カードを追加</h2>
-                <button onclick="closeModal()" class="text-slate-400 text-3xl p-2">&times;</button>
+            <div class="flex justify-between items-center mb-4 text-orange-400 font-bold">
+                <h2>カード追加（英名で検索）</h2>
+                <button onclick="closeModal()" class="text-3xl">&times;</button>
             </div>
-            
-            <div class="relative mb-4">
-                <input id="card-input" type="text" oninput="fetchSuggestions(this.value)" 
-                    placeholder="日本語名でOK（例：ラノワール）" 
-                    class="w-full p-4 rounded-lg bg-slate-800 border-2 border-orange-500 outline-none text-lg">
-                <div id="loading-spinner" class="hidden absolute right-4 top-4 loading text-orange-500 text-xl">🔥</div>
-            </div>
-
+            <input id="card-input" type="text" oninput="fetchSuggestions(this.value)" placeholder="英名を入力 (例: llanowar)" class="w-full p-4 rounded-lg bg-slate-800 border-2 border-orange-500 outline-none mb-4">
             <div id="suggestions" class="flex-grow overflow-y-auto space-y-2 pb-10"></div>
         </div>
     </div>
 
     <script>
-        // データの読み込み
-        let appData = JSON.parse(localStorage.getItem('pyreSearcher_v4') || '{"currentDeckIndex":0, "decks":[{"name":"メインデッキ", "cards":[]}]}');
+        let appData = JSON.parse(localStorage.getItem('pyre_v6') || '{"currentDeckIndex":0, "decks":[{"name":"メインデッキ", "cards":[]}]}');
 
-        function save() {
-            localStorage.setItem('pyreSearcher_v4', JSON.stringify(appData));
-            render();
-        }
-
-        // 日本語検索のキモ：Scryfall APIの「日本語優先検索」
-        let timer;
-        function fetchSuggestions(query) {
+        // ★ここが修正ポイント：日本語版を強制的に探しに行く
+        async function fetchSuggestions(query) {
             const container = document.getElementById('suggestions');
-            const spinner = document.getElementById('loading-spinner');
             if (query.length < 2) { container.innerHTML = ""; return; }
             
-            spinner.classList.remove('hidden');
-            clearTimeout(timer);
-            timer = setTimeout(async () => {
+            clearTimeout(this.timer);
+            this.timer = setTimeout(async () => {
                 try {
-                    // 「日本語(ja)を含み、クリーチャーである」カードをあいまい検索
-                    const res = await fetch(`https://api.scryfall.com/cards/search?q=lang%3Aany+type%3Acreature+name%3A${encodeURIComponent(query)}&order=name`);
+                    // 日本語版があるかに関わらず、まずカードを特定する
+                    const res = await fetch(`https://api.scryfall.com/cards/search?q=name%3A${encodeURIComponent(query)}+type%3Acreature&order=name`);
                     const data = await res.json();
-                    spinner.classList.add('hidden');
                     
                     if (data.data) {
-                        container.innerHTML = data.data.map(card => {
-                            // 日本語名(printed_name)があれば取得、なければ英語名
-                            const displayName = card.printed_name || card.name;
-                            return `
-                                <div onclick="addCard('${card.id}')" class="bg-slate-800 p-4 rounded-lg border border-slate-700 active:bg-orange-700 transition-colors">
-                                    <div class="font-bold text-base text-white">${displayName}</div>
-                                    <div class="text-[10px] text-slate-500 italic">${card.name !== displayName ? card.name : ''}</div>
-                                    <div class="text-[10px] text-orange-300 mt-1">CMC: ${card.cmc} / ${card.type_line}</div>
-                                </div>
-                            `;
-                        }).join('');
-                    } else {
-                        container.innerHTML = `<div class="p-4 text-slate-500">見つかりませんでした。英語名も試してみてね。</div>`;
+                        container.innerHTML = data.data.map(card => `
+                            <div onclick="registerCard('${card.name}')" class="bg-slate-800 p-4 rounded-lg border border-slate-700 active:bg-orange-700">
+                                <div class="font-bold text-white">${card.name}</div>
+                                <div class="text-[10px] text-slate-400">タップして日本語名で登録</div>
+                            </div>
+                        `).join('');
                     }
-                } catch (e) { spinner.classList.add('hidden'); }
-            }, 600);
+                } catch (e) { }
+            }, 500);
         }
 
-        async function addCard(scryfallId) {
-            const spinner = document.getElementById('loading-spinner');
-            spinner.classList.remove('hidden');
+        async function registerCard(englishName) {
             try {
-                // IDで直接取得して正確なデータを保存
-                const res = await fetch(`https://api.scryfall.com/cards/${scryfallId}`);
+                // 日本語版のカード情報を優先して取得するAPIリクエスト
+                const res = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(englishName)}&set=any`);
                 const data = await res.json();
                 
-                // 言語設定に関わらず日本語名(ja)のデータを再取得する試み
-                let finalName = data.printed_name || data.name;
+                // 日本語データ(ja)を個別に取得しに行く
+                const langRes = await fetch(`https://api.scryfall.com/cards/search?q=name%3A"${encodeURIComponent(data.name)}"+lang%3Aja`);
+                const langData = await langRes.json();
                 
+                // 日本語名があればそれを使う、なければ仕方ないので英名
+                const finalName = (langData.data && langData.data[0].printed_name) ? langData.data[0].printed_name : data.name;
+
                 const card = {
                     id: Date.now(),
                     name: finalName,
                     cmc: data.cmc,
-                    // クリーチャータイプを抽出
                     types: (data.type_line.split(" — ")[1] || "").split(" ").filter(t => t !== ""),
                     active: true
                 };
                 appData.decks[appData.currentDeckIndex].cards.push(card);
                 save();
                 closeModal();
-            } catch (e) { alert("登録に失敗しました"); }
-            finally { spinner.classList.add('hidden'); }
+            } catch (e) { alert("登録エラー"); }
         }
+
+        function save() { localStorage.setItem('pyre_v6', JSON.stringify(appData)); render(); }
 
         function render() {
             const selector = document.getElementById('deck-selector');
             selector.innerHTML = appData.decks.map((d, i) => `<option value="${i}" ${i == appData.currentDeckIndex ? 'selected' : ''}>${d.name}</option>`).join('');
-
             const list = document.getElementById('deck-list');
             list.innerHTML = "";
             const currentDeck = appData.decks[appData.currentDeckIndex];
-            
-            // CMC順にソートして表示
-            const sortedCards = [...currentDeck.cards].sort((a, b) => a.cmc - b.cmc);
-
-            if (sortedCards.length === 0) {
-                list.innerHTML = `<div class="text-center text-slate-500 mt-20 italic">カードがありません。<br>右下の＋から追加してください。</div>`;
-                return;
-            }
-
-            sortedCards.forEach(card => {
+            [...currentDeck.cards].sort((a, b) => a.cmc - b.cmc).forEach(card => {
                 const div = document.createElement('div');
-                div.className = `bg-slate-800 border-l-4 ${card.active ? 'border-orange-500' : 'border-slate-600 inactive'} rounded shadow-lg transition-all`;
+                div.className = `bg-slate-800 border-l-4 ${card.active ? 'border-orange-500' : 'border-slate-600 inactive'} rounded shadow mb-3`;
                 div.innerHTML = `
                     <div class="p-3 flex items-center gap-3">
-                        <input type="checkbox" ${card.active ? 'checked' : ''} onchange="toggleCardActive(${card.id})" class="w-6 h-6 accent-orange-500">
+                        <input type="checkbox" ${card.active ? 'checked' : ''} onchange="toggleCardActive(${card.id})" class="w-6 h-6">
                         <div class="flex-grow overflow-hidden" onclick="toggleSearch(${card.id})">
                             <div class="flex items-center gap-2">
                                 <span class="bg-slate-900 text-orange-400 font-bold px-2 py-0.5 rounded text-xs min-w-[2rem] text-center">${card.cmc}</span>
-                                <span class="font-bold text-sm truncate">${card.name}</span>
+                                <span class="font-bold text-sm truncate text-white">${card.name}</span>
                             </div>
                         </div>
-                        <button onclick="removeCard(${card.id})" class="text-slate-600 px-2 text-2xl">&times;</button>
+                        <button onclick="removeCard(${card.id})" class="text-slate-600 px-2 text-xl">&times;</button>
                     </div>
-                    <div id="res-${card.id}" class="hidden bg-black/40 p-3 border-t border-slate-700 text-sm rounded-b"></div>
+                    <div id="res-${card.id}" class="hidden bg-black/40 p-3 border-t border-slate-700 text-sm"></div>
                 `;
                 list.appendChild(div);
             });
@@ -164,40 +129,17 @@
         function toggleSearch(id) {
             const resDiv = document.getElementById(`res-${id}`);
             if (!resDiv.classList.contains('hidden')) { resDiv.classList.add('hidden'); return; }
-
             const currentCards = appData.decks[appData.currentDeckIndex].cards;
             const card = currentCards.find(c => c.id === id);
-            
-            // サーチ条件：採用中(active) かつ CMC+1 かつ タイプを1つ以上共有
-            const targets = currentCards.filter(c => 
-                c.active && 
-                c.cmc === card.cmc + 1 && 
-                c.types.some(t => card.types.includes(t))
-            );
-
-            if (targets.length > 0) {
-                resDiv.innerHTML = `<div class="text-orange-500 text-[10px] font-bold mb-1 uppercase tracking-wider">🔥 Searchable:</div>` + 
-                    targets.map(t => `<div class="py-1 border-b border-slate-800 last:border-0">・${t.name}</div>`).join('');
-            } else {
-                resDiv.innerHTML = `<div class="text-slate-600 italic text-xs">サーチ先がありません</div>`;
-            }
+            const targets = currentCards.filter(c => c.active && c.cmc === card.cmc + 1 && c.types.some(t => card.types.includes(t)));
+            resDiv.innerHTML = targets.length > 0 ? `<div class="text-orange-500 text-[10px] font-bold mb-1 uppercase">Searchable:</div>` + targets.map(t => `<div class="py-1">・${t.name}</div>`).join('') : `<div class="text-slate-600 italic text-xs">候補なし</div>`;
             resDiv.classList.remove('hidden');
         }
 
-        function changeDeck(index) { appData.currentDeckIndex = parseInt(index); save(); }
-        function addNewDeck() {
-            const name = prompt("新しいデッキの名前は？");
-            if (name) { appData.decks.push({name: name, cards: []}); appData.currentDeckIndex = appData.decks.length - 1; save(); }
-        }
-        function deleteCurrentDeck() {
-            if (appData.decks.length <= 1) return alert("最後のデッキは削除できません");
-            if (confirm(`デッキ「${appData.decks[appData.currentDeckIndex].name}」を削除しますか？`)) {
-                appData.decks.splice(appData.currentDeckIndex, 1);
-                appData.currentDeckIndex = 0;
-                save();
-            }
-        }
-        function removeCard(id) { if(confirm('このカードを削除しますか？')) { appData.decks[appData.currentDeckIndex].cards = appData.decks[appData.currentDeckIndex].cards.filter(c => c.id !== id); save(); } }
+        function changeDeck(index) { appData.currentDeckIndex = parseInt(index); render(); }
+        function addNewDeck() { const name = prompt("デッキ名？"); if (name) { appData.decks.push({name: name, cards: []}); appData.currentDeckIndex = appData.decks.length - 1; save(); } }
+        function deleteCurrentDeck() { if (appData.decks.length > 1 && confirm("削除しますか？")) { appData.decks.splice(appData.currentDeckIndex, 1); appData.currentDeckIndex = 0; save(); } }
+        function removeCard(id) { if(confirm('カード削除？')) { appData.decks[appData.currentDeckIndex].cards = appData.decks[appData.currentDeckIndex].cards.filter(c => c.id !== id); save(); } }
         function openModal() { document.getElementById('modal').classList.remove('hidden'); document.getElementById('card-input').focus(); }
         function closeModal() { document.getElementById('modal').classList.add('hidden'); document.getElementById('card-input').value = ""; document.getElementById('suggestions').innerHTML = ""; }
 
