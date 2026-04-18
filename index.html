@@ -3,17 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>送り火サーチャー Final</title>
+    <title>送り火サーチャー Ultimate-Fixed</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .inactive { opacity: 0.35; filter: grayscale(0.8); }
         .mode-active { border-bottom: 3px solid #f97316; color: #f97316; font-weight: bold; }
         .is-mercenary { color: #fbbf24 !important; font-weight: bold; }
+        /* スティッキーヘッダー：親要素の制約を受けないようz-indexを調整 */
+        .sticky-cmc {
+            position: -webkit-sticky;
+            position: sticky;
+            top: 104px; /* ヘッダーの高さ(約104px)に合わせて調整 */
+            background-color: #0f172a; /* 背景を不透明にして文字が重ならないように */
+            z-index: 20;
+        }
     </style>
 </head>
 <body class="bg-slate-900 text-slate-200 min-h-screen flex flex-col font-sans">
 
-    <header class="bg-slate-800 shadow-2xl sticky top-0 z-40 border-b border-slate-700">
+    <header id="main-header" class="bg-slate-800 shadow-2xl sticky top-0 z-40 border-b border-slate-700">
         <div class="flex justify-around border-b border-slate-700">
             <button onclick="setMode('edit')" id="btn-edit" class="px-6 py-3 text-sm">編集モード</button>
             <button onclick="setMode('search')" id="btn-search" class="px-6 py-3 text-sm">サーチモード</button>
@@ -27,20 +35,20 @@
         </div>
     </header>
 
-    <main class="flex-grow p-4 max-w-md mx-auto w-full">
-        <div id="quick-steal-zone" class="hidden mb-6 p-3 bg-slate-800 rounded-lg border border-orange-500/50 shadow-lg">
-            <div class="text-[10px] font-bold text-orange-400 mb-2 tracking-widest text-center">⚔️ クリーチャーを盗む ⚔️</div>
+    <main class="flex-grow p-4 max-w-md mx-auto w-full relative">
+        <div id="quick-steal-zone" class="hidden mb-6 p-3 bg-slate-800 rounded-lg border border-orange-500/50 shadow-lg text-center">
+            <div class="text-[10px] font-bold text-orange-400 mb-2 tracking-widest uppercase">⚔️ 相手のカードからサーチ先を確認 ⚔️</div>
             <div class="flex gap-2">
-                <button onclick="openStealModal()" class="flex-grow bg-slate-700 py-2 rounded text-xs font-bold">検索して盗む</button>
+                <button onclick="openStealModal()" class="flex-grow bg-slate-700 py-2 rounded text-xs font-bold">検索</button>
                 <button onclick="openManualSteal()" class="flex-grow bg-slate-700 py-2 rounded text-xs font-bold">直接入力</button>
             </div>
         </div>
 
-        <div id="deck-list" class="space-y-6 pb-24 text-sm"></div>
+        <div id="deck-list" class="space-y-1 pb-24 text-sm"></div>
 
         <div id="export-zone" class="mt-10 p-4 bg-slate-800 rounded border border-slate-700 hidden">
             <h3 class="text-xs font-bold mb-2 text-slate-400">デッキテキスト書き出し</h3>
-            <textarea id="export-area" readonly class="w-full h-32 bg-slate-900 text-[10px] p-2 rounded border border-slate-700 outline-none mb-2 font-mono"></textarea>
+            <textarea id="export-area" readonly class="w-full h-32 bg-slate-900 text-[10px] p-2 rounded border border-slate-700 outline-none mb-2 font-mono text-white"></textarea>
             <button onclick="copyExportText()" class="w-full bg-slate-700 py-2 rounded text-xs">コピーする</button>
         </div>
     </main>
@@ -50,47 +58,41 @@
     <div id="modal" class="hidden fixed inset-0 bg-slate-900/98 z-50 p-4 overflow-y-auto">
         <div class="max-w-md mx-auto pt-4 flex flex-col h-full">
             <div class="flex justify-between items-center mb-4">
-                <h2 id="modal-title" class="font-bold text-orange-400">カード追加</h2>
-                <button onclick="closeModal()" class="text-3xl">&times;</button>
+                <h2 id="modal-title" class="font-bold text-orange-400 text-lg">カード追加</h2>
+                <button onclick="closeModal()" class="text-3xl text-slate-500">&times;</button>
             </div>
-            
             <div class="flex flex-col gap-2 mb-4 bg-slate-800 p-3 rounded border border-slate-700">
-                <label class="flex items-center gap-2 text-xs"><input type="checkbox" id="token-switch" onchange="toggleTokenFields(this.checked)"> 自作/トークン/直接入力</label>
-                <label id="mercenary-opt" class="flex items-center gap-2 text-xs text-yellow-500 hidden"><input type="checkbox" id="mercenary-check"> 傭兵(Mercenary)を追加する</label>
+                <label id="token-toggle-row" class="flex items-center gap-2 text-xs"><input type="checkbox" id="token-switch" onchange="toggleTokenFields(this.checked)"> 直接入力モード</label>
+                <label id="mercenary-opt" class="flex items-center gap-2 text-xs text-yellow-500 hidden"><input type="checkbox" id="mercenary-check"> 傭兵(Mercenary)として計算</label>
             </div>
-
             <div id="search-fields">
-                <input id="card-input" type="text" oninput="fetchSuggestions(this.value)" placeholder="カード名を入力..." class="w-full p-4 rounded bg-slate-800 border-2 border-orange-500 outline-none mb-4">
+                <input id="card-input" type="text" oninput="fetchSuggestions(this.value)" placeholder="名前を入力..." class="w-full p-4 rounded bg-slate-800 border-2 border-orange-500 outline-none mb-4 text-white">
                 <div id="suggestions" class="space-y-2 pb-10"></div>
             </div>
             <div id="token-fields" class="hidden space-y-4">
-                <input id="token-name" type="text" placeholder="名前" class="w-full p-4 rounded bg-slate-800 border border-slate-700 outline-none">
-                <input id="token-cmc" type="number" placeholder="CMC" class="w-full p-4 rounded bg-slate-800 border border-slate-700 outline-none text-white">
-                <input id="token-type" type="text" placeholder="タイプ（スペース区切り）" class="w-full p-4 rounded bg-slate-800 border border-slate-700 outline-none">
-                <button onclick="addManualCard()" class="w-full bg-orange-600 p-4 rounded font-bold">登録</button>
+                <input id="token-name" type="text" placeholder="名前" class="w-full p-4 rounded bg-slate-800 border border-slate-600 outline-none">
+                <input id="token-cmc" type="number" placeholder="CMC" class="w-full p-4 rounded bg-slate-800 border border-slate-600 outline-none text-white">
+                <input id="token-type" type="text" placeholder="タイプ（スペース区切り）" class="w-full p-4 rounded bg-slate-800 border border-slate-600 outline-none">
+                <button id="modal-submit-btn" onclick="addManualCard()" class="w-full bg-orange-600 p-4 rounded font-bold">決定</button>
             </div>
         </div>
     </div>
 
     <div id="import-modal" class="hidden fixed inset-0 bg-slate-900/98 z-50 p-4">
-        <div class="max-w-md mx-auto pt-4 flex flex-col h-full">
-            <div class="flex justify-between items-center mb-4 text-orange-400"><h2 class="font-bold text-lg">一括登録</h2><button onclick="closeImportModal()" class="text-3xl">&times;</button></div>
-            <textarea id="import-area" placeholder="1 ラノワールのエルフ&#10;1 思考囲い" class="w-full h-64 p-4 rounded bg-slate-800 border border-slate-600 outline-none mb-4 text-sm"></textarea>
+        <div class="max-w-md mx-auto pt-4 flex flex-col h-full text-center">
+            <div class="flex justify-between items-center mb-4 text-orange-400"><h2 class="font-bold">一括登録</h2><button onclick="closeImportModal()" class="text-3xl">&times;</button></div>
+            <textarea id="import-area" placeholder="1 枝分かれの道&#10;1 ラノワールのエルフ" class="w-full h-64 p-4 rounded bg-slate-800 border border-slate-600 outline-none mb-4 text-sm text-white"></textarea>
             <button id="import-btn" onclick="processImport()" class="bg-orange-600 p-4 rounded font-bold">インポート開始</button>
             <p id="import-status" class="mt-4 text-xs text-orange-300"></p>
         </div>
     </div>
 
     <script>
-        let appData = JSON.parse(localStorage.getItem('pyre_v11') || '{"mode":"edit", "currentDeckIndex":0, "decks":[{"name":"メイン", "cards":[]}]}');
+        let appData = JSON.parse(localStorage.getItem('pyre_v13') || '{"mode":"edit", "currentDeckIndex":0, "decks":[{"name":"メイン", "cards":[]}]}');
         let isStealing = false;
 
-        function save() { localStorage.setItem('pyre_v11', JSON.stringify(appData)); render(); }
-
-        function setMode(mode) {
-            appData.mode = mode;
-            save();
-        }
+        function save() { localStorage.setItem('pyre_v13', JSON.stringify(appData)); render(); }
+        function setMode(mode) { appData.mode = mode; save(); }
 
         async function fetchSuggestions(query) {
             const container = document.getElementById('suggestions');
@@ -99,7 +101,7 @@
             const data = await res.json();
             if (data.data) {
                 container.innerHTML = data.data.map(card => `
-                    <div onclick="addCardById('${card.id}')" class="bg-slate-800 p-3 rounded border border-slate-700 active:bg-orange-700">
+                    <div onclick="handleCardSelection('${card.id}')" class="bg-slate-800 p-3 rounded border border-slate-700 active:bg-orange-700">
                         <div class="font-bold text-sm text-white">${card.printed_name || card.name}</div>
                         <div class="text-[10px] text-slate-500">${card.type_line}</div>
                     </div>
@@ -107,23 +109,19 @@
             }
         }
 
-        async function addCardById(id) {
+        async function handleCardSelection(id) {
             const res = await fetch(`https://api.scryfall.com/cards/${id}`);
             const data = await res.json();
             const shouldBeMerc = document.getElementById('mercenary-check').checked;
             let types = (data.type_line.split(" — ")[1] || "").split(" ").filter(t => t !== "");
             if (shouldBeMerc) types.push("Mercenary");
 
-            appData.decks[appData.currentDeckIndex].cards.push({
-                id: Date.now(),
-                name: data.printed_name || data.name,
-                cmc: data.cmc || 0,
-                types: types,
-                active: true,
-                icons: { L: data.type_line.includes("Legendary"), R: false, C: false, N: false, M: shouldBeMerc }
-            });
-            closeModal();
-            save();
+            const tempCard = { name: data.printed_name || data.name, cmc: data.cmc || 0, types: types };
+
+            if (isStealing) { showTemporaryResult(tempCard); } else {
+                appData.decks[appData.currentDeckIndex].cards.push({ id: Date.now(), ...tempCard, active: true, icons: { L: data.type_line.includes("Legendary"), R: false, C: false, N: false, M: false } });
+                closeModal(); save();
+            }
         }
 
         function addManualCard() {
@@ -134,14 +132,19 @@
             if (!name) return;
             let types = typeStr.split(" ").filter(t => t !== "");
             if (shouldBeMerc) types.push("Mercenary");
+            const tempCard = { name, cmc, types };
+            if (isStealing) { showTemporaryResult(tempCard); } else {
+                appData.decks[appData.currentDeckIndex].cards.push({ id: Date.now(), ...tempCard, active: true, icons: { L: false, R: false, C: false, N: false, M: false } });
+                closeModal(); save();
+            }
+        }
 
-            appData.decks[appData.currentDeckIndex].cards.push({
-                id: Date.now(),
-                name, cmc, types, active: true,
-                icons: { L: false, R: false, C: false, N: false, M: shouldBeMerc }
-            });
-            closeModal();
-            save();
+        function showTemporaryResult(card) {
+            const currentCards = appData.decks[appData.currentDeckIndex].cards.filter(c => c.active);
+            const targets = currentCards.filter(c => (c.cmc === card.cmc + 1) && (c.icons.C || c.types.some(t => card.types.includes(t))));
+            let msg = `【${card.name}】(${card.cmc}) ➡️\n\n`;
+            msg += targets.length > 0 ? targets.map(t => `・${t.name}`).join('\n') : "サーチ先なし";
+            alert(msg); closeModal();
         }
 
         function render() {
@@ -160,42 +163,78 @@
             const groups = {};
             cards.forEach(c => { if (!groups[c.cmc]) groups[c.cmc] = []; groups[c.cmc].push(c); });
 
-            let exportText = "";
-            currentDeck.cards.forEach(c => { exportText += `1 ${c.name}\n`; });
-            document.getElementById('export-area').value = exportText;
+            document.getElementById('export-area').value = currentDeck.cards.map(c => `1 ${c.name}`).join('\n');
 
             Object.keys(groups).sort((a, b) => a - b).forEach(cmc => {
                 const head = document.createElement('div');
-                head.innerHTML = `<div class="flex items-center gap-2 text-orange-500 font-bold mb-2"><span>${cmc}</span><div class="h-[1px] bg-slate-700 flex-grow mt-1"></div></div>`;
+                // stickyクラスを付与
+                head.className = "sticky-cmc py-2";
+                head.innerHTML = `<div class="flex items-center gap-2 text-orange-500 font-bold">
+                    <span class="bg-slate-900 pr-2">${cmc}</span>
+                    <div class="h-[1px] bg-orange-900/50 flex-grow"></div>
+                </div>`;
                 list.appendChild(head);
 
                 groups[cmc].forEach(card => {
                     const div = document.createElement('div');
-                    div.className = `relative py-2 border-b border-slate-800 flex items-center justify-between ${!card.active && isEdit ? 'inactive' : ''}`;
+                    div.className = `relative py-3 border-b border-slate-800 flex items-center justify-between ${!card.active && isEdit ? 'inactive' : ''}`;
                     div.innerHTML = `
-                        <div class="flex items-center gap-3 overflow-hidden">
+                        <div class="flex items-center gap-3 flex-grow overflow-hidden">
                             ${isEdit ? `<input type="checkbox" ${card.active ? 'checked' : ''} onchange="toggleCardActive(${card.id})" class="w-5 h-5 accent-orange-500">` : ''}
-                            <div onclick="toggleSearchResult(${card.id})">
+                            <div onclick="toggleSearchResult(${card.id})" class="flex-grow">
                                 <div class="font-bold text-sm ${card.icons.N && !isEdit ? 'text-blue-400' : 'text-slate-100'}">${card.name}</div>
                                 <div class="text-[9px] uppercase ${card.icons.M && !isEdit ? 'is-mercenary' : 'text-slate-500'}">${card.types.join(' ')}</div>
                             </div>
                         </div>
-                        <div class="flex gap-1">
+                        <div class="flex gap-1 items-center">
                             ${['L','R','C','N','M'].map(k => {
                                 if (isEdit && k === 'M') return ''; 
                                 return `<button onclick="toggleIcon(${card.id}, '${k}')" class="w-6 h-6 border rounded text-[10px] ${card.icons[k] ? 'bg-orange-600 border-orange-600 text-white' : 'border-slate-700 text-slate-600'} ${!isEdit && !card.icons[k] ? 'hidden' : ''}">${k}</button>`;
                             }).join('')}
-                            ${isEdit ? `<button onclick="removeCard(${card.id})" class="ml-2 text-slate-600 text-xl">&times;</button>` : ''}
+                            ${isEdit ? `<button onclick="removeCard(${card.id})" class="ml-3 text-red-500 text-2xl w-8 h-8 flex items-center justify-center bg-slate-800 rounded">&times;</button>` : ''}
                         </div>
                     `;
                     const resDiv = document.createElement('div');
                     resDiv.id = `res-${card.id}`;
                     resDiv.className = "hidden bg-black/40 p-2 text-xs text-orange-200 mt-1 rounded border-l-2 border-orange-500";
-                    list.appendChild(div);
-                    list.appendChild(resDiv);
+                    list.appendChild(div); list.appendChild(resDiv);
                 });
             });
         }
+
+        function removeCard(id) { if(confirm('削除しますか？')) { appData.decks[appData.currentDeckIndex].cards = appData.decks[appData.currentDeckIndex].cards.filter(c => c.id !== id); save(); } }
+        function toggleIcon(id, key) {
+            const card = appData.decks[appData.currentDeckIndex].cards.find(c => c.id === id);
+            card.icons[key] = !card.icons[key];
+            if (key === 'M') {
+                if (card.icons.M && !card.types.includes("Mercenary")) card.types.push("Mercenary");
+                else if (!card.icons.M) card.types = card.types.filter(t => t !== "Mercenary");
+            }
+            save();
+        }
+        function toggleSearchResult(id) {
+            const resDiv = document.getElementById(`res-${id}`);
+            if (!resDiv.classList.contains('hidden')) { resDiv.classList.add('hidden'); return; }
+            const currentCards = appData.decks[appData.currentDeckIndex].cards.filter(c => c.active);
+            const card = currentCards.find(c => c.id === id);
+            const targets = currentCards.filter(c => (c.cmc === card.cmc + 1) && (card.icons.C || c.types.some(t => card.types.includes(t))));
+            resDiv.innerHTML = targets.length > 0 ? targets.map(t => `<div class="py-0.5">・${t.name}</div>`).join('') : `候補なし`;
+            resDiv.classList.remove('hidden');
+        }
+        function copyExportText() { const area = document.getElementById('export-area'); area.select(); document.execCommand('copy'); alert("コピー完了！"); }
+        function openStealModal() { isStealing = true; document.getElementById('modal-title').innerText = "略奪サーチ"; document.getElementById('mercenary-opt').classList.remove('hidden'); document.getElementById('modal-submit-btn').innerText = "確認"; openModal(); }
+        function openManualSteal() { isStealing = true; document.getElementById('modal-title').innerText = "略奪直接入力"; document.getElementById('token-switch').checked = true; toggleTokenFields(true); document.getElementById('mercenary-opt').classList.remove('hidden'); document.getElementById('modal-submit-btn').innerText = "確認"; openModal(); }
+        function openModal() { document.getElementById('modal').classList.remove('hidden'); }
+        function closeModal() { 
+            document.getElementById('modal').classList.add('hidden'); document.getElementById('mercenary-opt').classList.add('hidden'); document.getElementById('mercenary-check').checked = false;
+            document.getElementById('token-switch').checked = false; document.getElementById('modal-title').innerText = "カード追加"; document.getElementById('modal-submit-btn').innerText = "決定"; isStealing = false; toggleTokenFields(false);
+        }
+        function openImportModal() { document.getElementById('import-modal').classList.remove('hidden'); }
+        function closeImportModal() { document.getElementById('import-modal').classList.add('hidden'); }
+        function toggleTokenFields(isT) { document.getElementById('search-fields').classList.toggle('hidden', isT); document.getElementById('token-fields').classList.toggle('hidden', !isT); }
+        function addNewDeck() { const n = prompt("デッキ名？"); if (n) { appData.decks.push({name:n, cards:[]}); appData.currentDeckIndex = appData.decks.length-1; save(); } }
+        function toggleCardActive(id) { const c = appData.decks[appData.currentDeckIndex].cards.find(x => x.id === id); c.active = !c.active; save(); }
+        function changeDeck(i) { appData.currentDeckIndex = parseInt(i); save(); }
 
         async function processImport() {
             const lines = document.getElementById('import-area').value.split('\n').filter(l => l.trim() !== "");
@@ -207,65 +246,13 @@
                     const res = await fetch(`https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(name)}`);
                     const data = await res.json();
                     if (data.type_line.includes("Creature")) {
-                        appData.decks[appData.currentDeckIndex].cards.push({
-                            id: Date.now() + Math.random(),
-                            name: data.printed_name || data.name,
-                            cmc: data.cmc || 0,
-                            types: (data.type_line.split(" — ")[1] || "").split(" ").filter(t => t !== ""),
-                            active: true,
-                            icons: { L: data.type_line.includes("Legendary"), R: false, C: false, N: false, M: false }
-                        });
+                        appData.decks[appData.currentDeckIndex].cards.push({ id: Date.now() + Math.random(), name: data.printed_name || data.name, cmc: data.cmc || 0, types: (data.type_line.split(" — ")[1] || "").split(" ").filter(t => t !== ""), active: true, icons: { L: data.type_line.includes("Legendary"), R: false, C: false, N: false, M: false } });
                     }
                 } catch (e) {}
                 await new Promise(r => setTimeout(r, 100));
             }
-            save();
-            closeImportModal();
+            save(); closeImportModal();
         }
-
-        function toggleIcon(id, key) {
-            const card = appData.decks[appData.currentDeckIndex].cards.find(c => c.id === id);
-            card.icons[key] = !card.icons[key];
-            if (key === 'M') {
-                if (card.icons.M && !card.types.includes("Mercenary")) card.types.push("Mercenary");
-                else if (!card.icons.M) card.types = card.types.filter(t => t !== "Mercenary");
-            }
-            save();
-        }
-
-        function toggleSearchResult(id) {
-            const resDiv = document.getElementById(`res-${id}`);
-            if (!resDiv.classList.contains('hidden')) { resDiv.classList.add('hidden'); return; }
-            const currentCards = appData.decks[appData.currentDeckIndex].cards.filter(c => c.active);
-            const card = currentCards.find(c => c.id === id);
-            const targets = currentCards.filter(c => (c.cmc === card.cmc + 1) && (card.icons.C || c.types.some(t => card.types.includes(t))));
-            resDiv.innerHTML = targets.length > 0 ? targets.map(t => `<div class="py-0.5">・${t.name}</div>`).join('') : `候補なし`;
-            resDiv.classList.remove('hidden');
-        }
-
-        function copyExportText() {
-            const area = document.getElementById('export-area');
-            area.select();
-            document.execCommand('copy');
-            alert("コピーしました。テキストファイル等に保存しておけば一括登録で復元できます！");
-        }
-
-        function openStealModal() { isStealing = true; document.getElementById('mercenary-opt').classList.remove('hidden'); openModal(); }
-        function openManualSteal() { isStealing = true; document.getElementById('token-switch').checked = true; toggleTokenFields(true); document.getElementById('mercenary-opt').classList.remove('hidden'); openModal(); }
-        function openModal() { document.getElementById('modal').classList.remove('hidden'); }
-        function closeModal() { 
-            document.getElementById('modal').classList.add('hidden'); 
-            document.getElementById('mercenary-opt').classList.add('hidden');
-            document.getElementById('mercenary-check').checked = false;
-            document.getElementById('token-switch').checked = false;
-            toggleTokenFields(false);
-        }
-        function openImportModal() { document.getElementById('import-modal').classList.remove('hidden'); }
-        function closeImportModal() { document.getElementById('import-modal').classList.add('hidden'); }
-        function toggleTokenFields(isT) { document.getElementById('search-fields').classList.toggle('hidden', isT); document.getElementById('token-fields').classList.toggle('hidden', !isT); }
-        function addNewDeck() { const n = prompt("デッキ名？"); if (n) { appData.decks.push({name:n, cards:[]}); appData.currentDeckIndex = appData.decks.length-1; save(); } }
-        function toggleCardActive(id) { const c = appData.decks[appData.currentDeckIndex].cards.find(x => x.id === id); c.active = !c.active; save(); }
-        function changeDeck(i) { appData.currentDeckIndex = parseInt(i); save(); }
 
         render();
     </script>
