@@ -3,126 +3,101 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>送り火サーチャー Ultimate</title>
+    <title>送り火サーチャー Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         .inactive { opacity: 0.35; filter: grayscale(0.8); }
-        .loading { animation: pulse 1.5s infinite; }
-        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+        .mode-btn { border-bottom: 3px solid transparent; }
+        .mode-active { border-bottom: 3px solid #f97316; color: #f97316; font-weight: bold; }
+        .icon-active { color: #f97316; border-color: #f97316; }
+        .is-needed { color: #60a5fa !important; } /* N(未所持)用 */
     </style>
 </head>
-<body class="bg-slate-900 text-white min-h-screen flex flex-col font-sans">
+<body class="bg-slate-900 text-slate-200 min-h-screen flex flex-col font-sans">
 
-    <header class="bg-slate-800 p-4 shadow-2xl sticky top-0 z-40 border-b border-orange-600">
-        <div class="flex justify-between items-center mb-2">
-            <h1 class="text-lg font-bold text-orange-500">🔥 送り火サーチャー</h1>
-            <div class="flex gap-2">
-                <button onclick="openImportModal()" class="text-[10px] bg-slate-700 px-2 py-1 rounded text-slate-300">一括登録</button>
-                <button onclick="addNewDeck()" class="text-[10px] bg-slate-700 px-2 py-1 rounded text-slate-300">+ 新規</button>
-            </div>
+    <header class="bg-slate-800 p-2 shadow-2xl sticky top-0 z-40 border-b border-slate-700">
+        <div class="flex justify-around mb-2">
+            <button onclick="setMode('edit')" id="btn-edit" class="mode-btn px-6 py-2 text-sm">編集モード</button>
+            <button onclick="setMode('search')" id="btn-search" class="mode-btn px-6 py-2 text-sm">サーチモード</button>
         </div>
-        <select id="deck-selector" onchange="changeDeck(this.value)" class="w-full bg-slate-900 border border-slate-600 p-2 rounded text-sm text-orange-200 outline-none"></select>
+        <div class="flex gap-2 px-2 pb-2">
+            <select id="deck-selector" onchange="changeDeck(this.value)" class="flex-grow bg-slate-900 border border-slate-600 p-2 rounded text-xs text-orange-200 outline-none"></select>
+            <button onclick="openImportModal()" class="bg-slate-700 px-3 rounded text-[10px]">一括</button>
+        </div>
     </header>
 
     <main class="flex-grow p-4 max-w-md mx-auto w-full">
-        <div id="deck-list" class="space-y-3 pb-24 text-sm text-center text-slate-500">
-            </div>
+        <div id="deck-list" class="space-y-6 pb-24"></div>
     </main>
 
-    <button onclick="openModal()" class="fixed bottom-6 right-6 bg-orange-600 w-14 h-14 rounded-full text-3xl shadow-lg z-30 flex items-center justify-center">＋</button>
+    <button id="floating-add" onclick="openModal()" class="fixed bottom-6 right-6 bg-orange-600 w-14 h-14 rounded-full text-3xl shadow-lg z-30 flex items-center justify-center">＋</button>
 
-    <div id="modal" class="hidden fixed inset-0 bg-slate-900/98 z-50 p-4">
+    <div id="modal" class="hidden fixed inset-0 bg-slate-900/98 z-50 p-4 overflow-y-auto">
         <div class="max-w-md mx-auto pt-4 flex flex-col h-full">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-lg font-bold text-orange-400">カード追加</h2>
-                <button onclick="closeModal()" class="text-slate-400 text-3xl">&times;</button>
+            <div class="flex justify-between items-center mb-4 text-orange-400">
+                <h2 class="font-bold">カード追加</h2>
+                <button onclick="closeModal()" class="text-3xl">&times;</button>
             </div>
-            <input id="card-input" type="text" oninput="fetchSuggestions(this.value)" placeholder="日本語・英語どっちもOK" class="w-full p-4 rounded-lg bg-slate-800 border-2 border-orange-500 outline-none mb-4">
-            <div id="suggestions" class="flex-grow overflow-y-auto space-y-2 pb-10"></div>
+            
+            <div class="flex items-center gap-2 mb-4 bg-slate-800 p-2 rounded">
+                <input type="checkbox" id="token-switch" onchange="toggleTokenFields(this.checked)">
+                <label for="token-switch" class="text-sm">トークンとして入力</label>
+            </div>
+
+            <div id="search-fields">
+                <input id="card-input" type="text" oninput="fetchSuggestions(this.value)" placeholder="カード名（英名/日本語）" class="w-full p-4 rounded bg-slate-800 border-2 border-orange-500 outline-none mb-4">
+                <div id="suggestions" class="space-y-2 pb-10"></div>
+            </div>
+
+            <div id="token-fields" class="hidden space-y-4">
+                <input id="token-name" type="text" placeholder="トークン名" class="w-full p-4 rounded bg-slate-800 border border-slate-600 outline-none">
+                <input id="token-type" type="text" placeholder="タイプ（例: 人間 兵士）" class="w-full p-4 rounded bg-slate-800 border border-slate-600 outline-none">
+                <button onclick="addToken()" class="w-full bg-orange-600 p-4 rounded font-bold">トークンを登録</button>
+            </div>
         </div>
     </div>
 
     <div id="import-modal" class="hidden fixed inset-0 bg-slate-900/98 z-50 p-4">
         <div class="max-w-md mx-auto pt-4 flex flex-col h-full">
             <div class="flex justify-between items-center mb-4 text-orange-400">
-                <h2 class="text-lg font-bold">晴れる屋等からリストを貼り付け</h2>
-                <button onclick="closeImportModal()" class="text-slate-400 text-3xl">&times;</button>
+                <h2 class="font-bold">一括登録（クリーチャーのみ）</h2>
+                <button onclick="closeImportModal()" class="text-3xl">&times;</button>
             </div>
-            <textarea id="import-area" placeholder="1 枝分かれの道&#13;&#10;2 ラノワールのエルフ&#13;&#10;みたいに貼り付けてね" class="w-full h-64 p-4 rounded-lg bg-slate-800 border border-slate-600 outline-none mb-4 text-sm"></textarea>
-            <button id="import-btn" onclick="processImport()" class="bg-orange-600 p-4 rounded-lg font-bold">一括登録を開始</button>
+            <textarea id="import-area" class="w-full h-64 p-4 rounded bg-slate-800 border border-slate-600 outline-none mb-4 text-sm"></textarea>
+            <button id="import-btn" onclick="processImport()" class="bg-orange-600 p-4 rounded font-bold">開始</button>
             <p id="import-status" class="mt-4 text-xs text-orange-300"></p>
         </div>
     </div>
 
     <script>
-        let appData = JSON.parse(localStorage.getItem('pyre_v8') || '{"currentDeckIndex":0, "decks":[{"name":"メインデッキ", "cards":[]}]}');
+        let appData = JSON.parse(localStorage.getItem('pyre_v9') || '{"mode":"edit", "currentDeckIndex":0, "decks":[{"name":"メイン", "cards":[]}]}');
 
-        // --- 一括取り込み処理 ---
-        async function processImport() {
-            const text = document.getElementById('import-area').value;
-            const lines = text.split('\n').filter(l => l.trim() !== "");
-            const status = document.getElementById('import-status');
-            const btn = document.getElementById('import-btn');
-            
-            btn.disabled = true;
-            let count = 0;
+        function save() { localStorage.setItem('pyre_v9', JSON.stringify(appData)); render(); }
 
-            for (let line of lines) {
-                // 数字とカード名を分ける（例: "4 ラノワールのエルフ" -> "ラノワールのエルフ"）
-                let cardName = line.replace(/^\d+\s+/, "").trim();
-                status.innerText = `登録中 (${count + 1}/${lines.length}): ${cardName}`;
-                
-                try {
-                    const res = await fetch(`https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(cardName)}`);
-                    const data = await res.json();
-                    
-                    // 日本語版を探す
-                    let finalName = data.printed_name || data.name;
-                    if (data.lang !== 'ja') {
-                        const jpRes = await fetch(`https://api.scryfall.com/cards/search?q=oracleid%3A${data.oracle_id}+lang%3Aja`);
-                        const jpData = await jpRes.json();
-                        if (jpData.data) finalName = jpData.data[0].printed_name || jpData.data[0].name;
-                    }
-
-                    appData.decks[appData.currentDeckIndex].cards.push({
-                        id: Date.now() + count,
-                        name: finalName,
-                        cmc: data.cmc,
-                        types: (data.type_line.split(" — ")[1] || "").split(" ").filter(t => t !== ""),
-                        active: true
-                    });
-                    count++;
-                } catch (e) { console.error(e); }
-                // APIに負荷をかけないよう少し待機
-                await new Promise(r => setTimeout(r, 100));
-            }
-
-            status.innerText = "完了しました！";
-            btn.disabled = false;
+        function setMode(mode) {
+            appData.mode = mode;
+            document.getElementById('floating-add').style.display = (mode === 'edit') ? 'flex' : 'none';
             save();
-            setTimeout(closeImportModal, 1000);
         }
 
-        // --- 基本機能（前回同様） ---
-        function save() { localStorage.setItem('pyre_v8', JSON.stringify(appData)); render(); }
+        function toggleTokenFields(isToken) {
+            document.getElementById('search-fields').classList.toggle('hidden', isToken);
+            document.getElementById('token-fields').classList.toggle('hidden', !isToken);
+        }
 
-        let timer;
         async function fetchSuggestions(query) {
             const container = document.getElementById('suggestions');
             if (query.length < 2) return;
-            clearTimeout(timer);
-            timer = setTimeout(async () => {
-                const res = await fetch(`https://api.scryfall.com/cards/search?q=name%3A${encodeURIComponent(query)}+type%3Acreature+lang%3Aany&order=name`);
-                const data = await res.json();
-                if (data.data) {
-                    container.innerHTML = data.data.map(card => `
-                        <div onclick="addCardById('${card.id}')" class="bg-slate-800 p-4 rounded-lg border border-slate-700 active:bg-orange-700">
-                            <div class="font-bold text-white">${card.printed_name || card.name}</div>
-                            <div class="text-[10px] text-slate-500">${card.name}</div>
-                        </div>
-                    `).join('');
-                }
-            }, 500);
+            const res = await fetch(`https://api.scryfall.com/cards/search?q=name%3A${encodeURIComponent(query)}+lang%3Aany&order=name`);
+            const data = await res.json();
+            if (data.data) {
+                container.innerHTML = data.data.map(card => `
+                    <div onclick="addCardById('${card.id}')" class="bg-slate-800 p-3 rounded border border-slate-700 active:bg-orange-700">
+                        <div class="font-bold text-sm text-white">${card.printed_name || card.name}</div>
+                        <div class="text-[10px] text-slate-500">${card.type_line}</div>
+                    </div>
+                `).join('');
+            }
         }
 
         async function addCardById(id) {
@@ -132,40 +107,101 @@
             appData.decks[appData.currentDeckIndex].cards.push({
                 id: Date.now(),
                 name: jpName,
-                cmc: data.cmc,
+                cmc: data.cmc || 0,
                 types: (data.type_line.split(" — ")[1] || "").split(" ").filter(t => t !== ""),
-                active: true
+                isLegendary: data.type_line.includes("Legendary"),
+                active: true,
+                icons: { L: data.type_line.includes("Legendary"), R: false, C: false, N: false }
+            });
+            save();
+            closeModal();
+        }
+
+        function addToken() {
+            const name = document.getElementById('token-name').value;
+            const typeStr = document.getElementById('token-type').value;
+            if (!name) return;
+            appData.decks[appData.currentDeckIndex].cards.push({
+                id: Date.now(),
+                name: name,
+                cmc: 0,
+                types: typeStr.split(" ").filter(t => t !== ""),
+                active: true,
+                icons: { L: false, R: false, C: false, N: false }
             });
             save();
             closeModal();
         }
 
         function render() {
+            document.getElementById('btn-edit').className = `mode-btn px-6 py-2 text-sm ${appData.mode === 'edit' ? 'mode-active' : ''}`;
+            document.getElementById('btn-search').className = `mode-btn px-6 py-2 text-sm ${appData.mode === 'search' ? 'mode-active' : ''}`;
+            
             const selector = document.getElementById('deck-selector');
             selector.innerHTML = appData.decks.map((d, i) => `<option value="${i}" ${i == appData.currentDeckIndex ? 'selected' : ''}>${d.name}</option>`).join('');
+            
             const list = document.getElementById('deck-list');
             list.innerHTML = "";
+            
             const currentDeck = appData.decks[appData.currentDeckIndex];
-            const sorted = [...currentDeck.cards].sort((a, b) => a.cmc - b.cmc);
-            if(sorted.length === 0) { list.innerHTML = "カードがありません"; return; }
-            sorted.forEach(card => {
-                const div = document.createElement('div');
-                div.className = `bg-slate-800 border-l-4 ${card.active ? 'border-orange-500' : 'border-slate-600 inactive'} rounded shadow mb-3 text-left`;
-                div.innerHTML = `
-                    <div class="p-3 flex items-center gap-3">
-                        <input type="checkbox" ${card.active ? 'checked' : ''} onchange="toggleCardActive(${card.id})" class="w-6 h-6 accent-orange-500">
-                        <div class="flex-grow" onclick="toggleSearch(${card.id})">
-                            <div class="flex items-center gap-2">
-                                <span class="bg-slate-900 text-orange-400 font-bold px-2 py-0.5 rounded text-xs min-w-[1.5rem] text-center">${card.cmc}</span>
-                                <span class="font-bold text-sm text-white">${card.name}</span>
+            // モードによるフィルタ
+            const filteredCards = currentDeck.cards.filter(c => appData.mode === 'edit' || c.active);
+            
+            // CMCごとにグループ化
+            const groups = {};
+            filteredCards.forEach(c => {
+                if (!groups[c.cmc]) groups[c.cmc] = [];
+                groups[c.cmc].push(c);
+            });
+
+            Object.keys(groups).sort((a, b) => a - b).forEach(cmc => {
+                const groupHeader = document.createElement('div');
+                groupHeader.innerHTML = `<div class="flex items-center gap-2 text-orange-500 font-bold mb-2">
+                    <span class="text-lg">${cmc}</span>
+                    <div class="h-[1px] bg-slate-700 flex-grow mt-1"></div>
+                </div>`;
+                list.appendChild(groupHeader);
+
+                groups[cmc].forEach(card => {
+                    const div = document.createElement('div');
+                    const isSearchMode = appData.mode === 'search';
+                    const isNeeded = card.icons.N && isSearchMode;
+                    
+                    div.className = `relative py-2 px-1 border-b border-slate-800 flex items-center justify-between ${!card.active && !isSearchMode ? 'inactive' : ''}`;
+                    div.innerHTML = `
+                        <div class="flex items-center gap-3 flex-grow overflow-hidden">
+                            ${!isSearchMode ? `<input type="checkbox" ${card.active ? 'checked' : ''} onchange="toggleCardActive(${card.id})" class="w-5 h-5 accent-orange-500">` : ''}
+                            <div class="flex-grow" onclick="toggleSearchResult(${card.id})">
+                                <div class="font-bold text-sm ${isNeeded ? 'is-needed' : 'text-slate-100'}">${card.name}</div>
+                                <div class="text-[9px] text-slate-500 truncate uppercase">${card.types.join(' ')}</div>
                             </div>
                         </div>
-                        <button onclick="removeCard(${card.id})" class="text-slate-600 px-2 text-xl">&times;</button>
-                    </div>
-                    <div id="res-${card.id}" class="hidden bg-black/40 p-3 border-t border-slate-700 text-xs text-orange-100"></div>
-                `;
-                list.appendChild(div);
+                        <div class="flex gap-1">
+                            ${['L','R','C','N'].map(key => `
+                                <button onclick="toggleIcon(${card.id}, '${key}')" 
+                                    class="w-6 h-6 border rounded text-[10px] flex items-center justify-center 
+                                    ${card.icons[key] ? 'bg-orange-600 border-orange-600 text-white' : 'border-slate-700 text-slate-600'} 
+                                    ${isSearchMode && !card.icons[key] ? 'hidden' : ''}">
+                                    ${key}
+                                </button>
+                            `).join('')}
+                            ${!isSearchMode ? `<button onclick="removeCard(${card.id})" class="ml-2 text-slate-600 text-lg">&times;</button>` : ''}
+                        </div>
+                    `;
+                    const resDiv = document.createElement('div');
+                    resDiv.id = `res-${card.id}`;
+                    resDiv.className = "hidden bg-black/30 p-2 text-xs text-orange-200 mt-1 rounded";
+                    
+                    list.appendChild(div);
+                    list.appendChild(resDiv);
+                });
             });
+        }
+
+        function toggleIcon(id, key) {
+            const card = appData.decks[appData.currentDeckIndex].cards.find(c => c.id === id);
+            card.icons[key] = !card.icons[key];
+            save();
         }
 
         function toggleCardActive(id) {
@@ -174,24 +210,67 @@
             save();
         }
 
-        function toggleSearch(id) {
+        function toggleSearchResult(id) {
             const resDiv = document.getElementById(`res-${id}`);
             if (!resDiv.classList.contains('hidden')) { resDiv.classList.add('hidden'); return; }
-            const currentCards = appData.decks[appData.currentDeckIndex].cards;
+
+            const currentCards = appData.decks[appData.currentDeckIndex].cards.filter(c => c.active);
             const card = currentCards.find(c => c.id === id);
-            const targets = currentCards.filter(c => c.active && c.cmc === card.cmc + 1 && c.types.some(t => card.types.includes(t)));
-            resDiv.innerHTML = targets.length > 0 ? `<div class="text-orange-500 font-bold mb-1 uppercase">Searchable:</div>` + targets.map(t => `<div class="py-1">・${t.name}</div>`).join('') : `<div class="text-slate-600 italic font-bold">候補なし</div>`;
+            
+            // サーチロジック
+            const targets = currentCards.filter(c => {
+                const cmcMatch = c.cmc === card.cmc + 1;
+                const typeMatch = c.types.some(t => card.types.includes(t));
+                
+                // C (多相) の特別ルール：多相持ちがいれば、その CMC+1 の全クリーチャーが対象
+                if (card.icons.C && cmcMatch) return true;
+                
+                return cmcMatch && typeMatch;
+            });
+
+            if (targets.length > 0) {
+                resDiv.innerHTML = `<div class="font-bold opacity-50 mb-1">SEARCHABLE:</div>` + targets.map(t => `<div class="py-0.5">・${t.name}</div>`).join('');
+            } else {
+                resDiv.innerHTML = `<div class="italic opacity-50">該当なし</div>`;
+            }
             resDiv.classList.remove('hidden');
         }
 
-        function changeDeck(index) { appData.currentDeckIndex = parseInt(index); render(); }
-        function addNewDeck() { const name = prompt("デッキ名？"); if (name) { appData.decks.push({name: name, cards: []}); appData.currentDeckIndex = appData.decks.length - 1; save(); } }
+        // インポート（クリーチャーのみに制限）
+        async function processImport() {
+            const text = document.getElementById('import-area').value;
+            const lines = text.split('\n').filter(l => l.trim() !== "");
+            const status = document.getElementById('import-status');
+            for (let line of lines) {
+                let name = line.replace(/^\d+\s+/, "").trim();
+                status.innerText = `処理中: ${name}`;
+                try {
+                    const res = await fetch(`https://api.scryfall.com/cards/named?fuzzy=${encodeURIComponent(name)}`);
+                    const data = await res.json();
+                    if (data.type_line.includes("Creature")) {
+                        appData.decks[appData.currentDeckIndex].cards.push({
+                            id: Date.now() + Math.random(),
+                            name: data.printed_name || data.name,
+                            cmc: data.cmc || 0,
+                            types: (data.type_line.split(" — ")[1] || "").split(" ").filter(t => t !== ""),
+                            active: true,
+                            icons: { L: data.type_line.includes("Legendary"), R: false, C: false, N: false }
+                        });
+                    }
+                } catch (e) {}
+                await new Promise(r => setTimeout(r, 100));
+            }
+            save();
+            closeImportModal();
+        }
+
+        function changeDeck(index) { appData.currentDeckIndex = parseInt(index); save(); }
+        function addNewDeck() { const name = prompt("デッキ名？"); if (name) { appData.decks.push({name, cards:[]}); appData.currentDeckIndex = appData.decks.length-1; save(); } }
         function removeCard(id) { if(confirm('削除？')) { appData.decks[appData.currentDeckIndex].cards = appData.decks[appData.currentDeckIndex].cards.filter(c => c.id !== id); save(); } }
-        
         function openModal() { document.getElementById('modal').classList.remove('hidden'); }
         function closeModal() { document.getElementById('modal').classList.add('hidden'); }
         function openImportModal() { document.getElementById('import-modal').classList.remove('hidden'); }
-        function closeImportModal() { document.getElementById('import-modal').classList.add('hidden'); document.getElementById('import-area').value = ""; document.getElementById('import-status').innerText = ""; }
+        function closeImportModal() { document.getElementById('import-modal').classList.add('hidden'); }
 
         render();
     </script>
